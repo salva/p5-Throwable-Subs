@@ -1,0 +1,6 @@
+Revision history for Perl extension Throwable::Subs.
+
+0.01  Wed Jan 29 10:55:37 2014
+	- original version; created by h2xs 1.23 with options
+		-AXn Throwable::Subs
+
