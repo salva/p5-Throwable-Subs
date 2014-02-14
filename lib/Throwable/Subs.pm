@@ -1,84 +1,102 @@
 package Throwable::Subs;
 
-use 5.014002;
-use strict;
-use warnings;
-
-require Exporter;
-
-our @ISA = qw(Exporter);
-
-# Items to export into callers namespace by default. Note: do not export
-# names by default without a very good reason. Use EXPORT_OK instead.
-# Do not simply export all your public functions/methods/constants.
-
-# This allows declaration	use Throwable::Subs ':all';
-# If you do not need this, moving things directly into @EXPORT or @EXPORT_OK
-# will save memory.
-our %EXPORT_TAGS = ( 'all' => [ qw(
-	
-) ] );
-
-our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
-
-our @EXPORT = qw(
-	
-);
-
 our $VERSION = '0.01';
 
+use strict qw(vars subs);
+use warnings;
+BEGIN { require Moo };
 
-# Preloaded methods go here.
+use parent qw(Exporter::Tiny);
+
+
+my %seen;
+
+sub _underscores2camel_case {
+    my $name = shift;
+    my @parts = split (/_/, $name);
+    s/^(.)/uc $1/e for @parts;
+    join('', @parts);
+}
+
+sub _exporter_expand_sub {
+    my ($class, $name, @more) = @_;
+    my $code = $seen{$class}{$name};
+    unless ($code) {
+        if ($name =~ /^throw_(.+)_exception$/) {
+            my $exception_class = $class . '::' . _underscores2camel_case($1);
+            eval <<EOP;
+unless (\@${exception_class}::ISA) {
+  package $exception_class;
+  Moo->import;
+  extends('Throwable::Error');
+}
+EOP
+            die "Internal error: $@" if $@;
+            $code = $seen{$class}{$name} = sub {
+                my $method = $exception_class->can('throw')
+                    or die "Internal error: 'throw' method not found in class $exception_class";
+                unshift @_, $exception_class;
+                goto &$method; # goto is used in order to remove this
+                               # completely uninteresting frame from
+                               # the stacktrace
+            };
+        }
+        else {
+            $class->_exporter_fail($name, @more);
+            return ()
+        }
+    }
+    ($name, $code)
+}
 
 1;
 __END__
-# Below is stub documentation for your module. You'd better edit it!
 
 =head1 NAME
 
-Throwable::Subs - Perl extension for blah blah blah
+Throwable::Subs - build and throw exception objects with minimal boilerplate
 
 =head1 SYNOPSIS
 
-  use Throwable::Subs;
-  blah blah blah
+  package My::App::Exception;
+  use parent 'Throwable::Subs'
+  1;
+
+  package My::App;
+  use My::App::Exception qw(throw_foo_exception);
+
+  try {
+    do_something()
+        or throw_foo_exception("something is wrong");
+        # throws an object of class My::App::Exception::Foo
+  }
+  catch {
+    if ($_->isa('My::App::Exception::Foo')) {
+      ...
+    }
+  }
+
 
 =head1 DESCRIPTION
 
-Stub documentation for Throwable::Subs, created by h2xs. It looks like the
-author of the extension was negligent enough to leave the stub
-unedited.
-
-Blah blah blah.
-
-=head2 EXPORT
-
-None by default.
-
-
+This module allows to create easyly a package where exception clases
+are defined and later throwing objects of that classes from other
+packages.
 
 =head1 SEE ALSO
 
-Mention other useful documentation such as the documentation of
-related modules or operating system documentation (such as man pages
-in UNIX), or any relevant external documentation such as RFCs or
-standards.
-
-If you have a mailing list set up for your module, mention it here.
-
-If you have a web site set up for your module, mention it here.
+L<Throwable::Error>, L<Exporter::Tiny>
 
 =head1 AUTHOR
 
-Salvador Fandino, E<lt>salva@E<gt>
+Salvador FandiE<ntilde>o, E<lt>sfandino@yahoo.comE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2014 by Salvador Fandino
+Copyright (C) 2014 by Qindel Formacion y Servicios S.L.
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself, either Perl version 5.14.2 or,
 at your option, any later version of Perl 5 you may have available.
-
 
 =cut
